@@ -10,15 +10,49 @@ export default function IndexController(container) {
   this._lostConnectionToast = null;
   this._openSocket();
   this._registerServiceWorker();
+  this._updateReady();
 }
 
 IndexController.prototype._registerServiceWorker = function () {
-  // TODO: register a service worker
   if (!navigator.serviceWorker) return;
-  navigator.serviceWorker.register('/sw.js').then(function () {
-    console.log("Registration worked!");
-  }).catch(function () {
-    console.log("Registration failed!");
+
+  let indexController = this;
+
+  navigator.serviceWorker.register('/sw.js')
+    .then(function (reg) {
+      if (!navigator.serviceWorker.controller) {
+        return;
+      }
+
+      if (reg.waiting) {
+        indexController._updateReady();
+        return;
+      }
+
+      if (reg.installing) {
+        indexController._trackInstalling(reg.installing);
+        return;
+      }
+
+      reg.addEventListener('updatefound', function () {
+        indexController._trackInstalling(reg.installing);
+      });
+    });
+};
+
+IndexController.prototype._trackInstalling = function (worker) {
+  let indexController = this;
+
+  worker.addEventListener('stateChange', function () {
+    if (worker.state == 'installed') {
+      indexController._updateReady();
+    }
+  });
+};
+
+IndexController.prototype._updateReady = function () {
+  let toast = this._toastsView.show("New version available", {
+    buttons: ['whatever']
   });
 };
 
