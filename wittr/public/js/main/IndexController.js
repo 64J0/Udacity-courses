@@ -1,7 +1,7 @@
 // Configuration of the app
 import PostsView from './views/Posts';
 import ToastsView from './views/Toasts';
-import idb from 'idb';
+//import idb from 'idb';
 
 export default function IndexController(container) {
   this._container = container;
@@ -10,7 +10,6 @@ export default function IndexController(container) {
   this._lostConnectionToast = null;
   this._openSocket();
   this._registerServiceWorker();
-  this._updateReady();
 }
 
 IndexController.prototype._registerServiceWorker = function () {
@@ -21,23 +20,27 @@ IndexController.prototype._registerServiceWorker = function () {
   navigator.serviceWorker.register('/sw.js')
     .then(function (reg) {
       if (!navigator.serviceWorker.controller) {
-        return;
+        return null;
       }
 
       if (reg.waiting) {
-        indexController._updateReady();
-        return;
+        return indexController._updateReady(reg.waiting);
       }
 
       if (reg.installing) {
-        indexController._trackInstalling(reg.installing);
-        return;
+        return indexController._trackInstalling(reg.installing);
       }
 
       reg.addEventListener('updatefound', function () {
-        indexController._trackInstalling(reg.installing);
+        return indexController._trackInstalling(reg.installing);
       });
     });
+
+  // TODO: listen for the controlling service worker changing
+  // and reload the page
+  navigator.serviceWorker.addEventListener('controllerchange', function () {
+    return window.location.reload();
+  });
 };
 
 IndexController.prototype._trackInstalling = function (worker) {
@@ -45,15 +48,23 @@ IndexController.prototype._trackInstalling = function (worker) {
 
   worker.addEventListener('stateChange', function () {
     if (worker.state == 'installed') {
-      indexController._updateReady();
+      return indexController._updateReady(worker);
     }
   });
 };
 
-IndexController.prototype._updateReady = function () {
+IndexController.prototype._updateReady = function (worker) {
   let toast = this._toastsView.show("New version available", {
-    buttons: ['whatever']
+    buttons: ['refresh', 'dismiss']
   });
+
+  toast.answer
+    .then(function (answer) {
+      if (answer != 'refresh') return null;
+
+      // TODO: tell the service worker to skipWaiting
+      return worker.postMessage({ action: 'skipWaiting' });
+    });
 };
 
 // open a connection to the server for live updates
