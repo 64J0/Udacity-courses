@@ -3,12 +3,35 @@ import PostsView from './views/Posts';
 import ToastsView from './views/Toasts';
 import idb from 'idb';
 
+function openDatabase() {
+  // If the browser doesn't support service worker,
+  // we don't care about having a database
+  if (!navigator.serviceWorker) {
+    // eslint-disable-next-line no-undef
+    return Promise.resolve();
+  }
+
+  // TODO: return a promise for a database called 'wittr'
+  // that contains one objectStore: 'witters'
+  // that uses 'id' as its key
+  // and has an index called 'by-date', which is sorted
+  // by the 'time' property
+  return idb.open('wittr', 1, function (upgradeDb) {
+    let store = upgradeDb.createObjectStore('witters', {
+      keyPath: 'id'
+    });
+
+    store.createIndex('by-date', 'time');
+  });
+}
+
 export default function IndexController(container) {
   this._container = container;
   this._postsView = new PostsView(this._container);
   this._toastsView = new ToastsView(this._container);
   this._lostConnectionToast = null;
   this._openSocket();
+  this._dbPromise = openDatabase();
   this._registerServiceWorker();
 }
 
@@ -38,8 +61,12 @@ IndexController.prototype._registerServiceWorker = function () {
 
   // TODO: listen for the controlling service worker changing
   // and reload the page
+  let refreshing;
   navigator.serviceWorker.addEventListener('controllerchange', function () {
-    return window.location.reload();
+    if (refreshing) return null;
+
+    window.location.reload();
+    return refreshing = true;
   });
 };
 
@@ -115,5 +142,23 @@ IndexController.prototype._openSocket = function () {
 // called when the web socket sends message data
 IndexController.prototype._onSocketMessage = function (data) {
   var messages = JSON.parse(data);
+
+  this._dbPromise.then(function (db) {
+    if (!db) return null;
+
+    // TODO: put each message into the 'wittr
+    // object store
+    let tx = db.transaction('witters', 'readwrite');
+    let wittersStore = tx.objectStore('witters');
+
+    messages.map((message) => {
+      wittersStore.put(message);
+    });
+
+    return tx.complete;
+  }).then(function () {
+    console.log("Messages added!");
+  });
+
   this._postsView.addPosts(messages);
 };

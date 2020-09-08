@@ -1,19 +1,21 @@
 import idb from 'idb';
 
-var dbPromise = idb.open('test-db', 3, function (upgradeDb) {
+var dbPromise = idb.open('test-db', 4, function (upgradeDb) {
   switch (upgradeDb.oldVersion) {
     case 0:
       var keyValStore = upgradeDb.createObjectStore('keyval');
       keyValStore.put("world", "hello");
 
-    // eslint-disable-next-line no-fallthrough
     case 1:
       upgradeDb.createObjectStore('people', { keyPath: 'name' });
 
-    // eslint-disable-next-line no-fallthrough
     case 2:
       var peopleStore = upgradeDb.transaction.objectStore('people');
       peopleStore.createIndex('animal', 'favoriteAnimal');
+
+    case 3:
+      peopleStore = upgradeDb.transaction.objectStore('people');
+      peopleStore.createIndex('age', 'age');
   }
 });
 
@@ -91,4 +93,21 @@ dbPromise.then(function (db) {
   return animalIndex.getAll('cat');
 }).then(function (people) {
   console.log('People: ', people);
+});
+
+dbPromise.then(function (db) {
+  let tx = db.transaction('people');
+  let peopleStore = tx.objectStore('people');
+
+  let ageIndex = peopleStore.index('age');
+
+  return ageIndex.openCursor();
+}).then(function logPerson(cursor) {
+  if (!cursor) return null;
+  console.log('Cursored at: ', cursor.value.name);
+  // cursor.update(newValue);
+  // cursor.delete();
+  return cursor.continue(logPerson);
+}).then(function () {
+  console.log('Done cursoring');
 });
