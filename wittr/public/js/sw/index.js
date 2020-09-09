@@ -6,7 +6,7 @@ const urlsToCache = [
   'https://fonts.gstatic.com/s/roboto/v15/2UX7WLTfW3W8TclTUvlFyQ.woff'
 ];
 
-const staticCacheName = 'wittr-static-v4';
+const staticCacheName = 'wittr-static-v6';
 
 self.addEventListener('install', function (event) {
   event.waitUntil(
@@ -56,8 +56,6 @@ self.addEventListener('fetch', function (event) {
   );
 });
 
-// TODO: listen for the "message" event, and call
-// skipWaiting if you get the appropriate message
 self.addEventListener('message', function (event) {
   if (event.data.action == 'skipWaiting') {
     self.skipWaiting();

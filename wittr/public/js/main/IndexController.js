@@ -4,18 +4,10 @@ import ToastsView from './views/Toasts';
 import idb from 'idb';
 
 function openDatabase() {
-  // If the browser doesn't support service worker,
-  // we don't care about having a database
   if (!navigator.serviceWorker) {
-    // eslint-disable-next-line no-undef
     return Promise.resolve();
   }
 
-  // TODO: return a promise for a database called 'wittr'
-  // that contains one objectStore: 'witters'
-  // that uses 'id' as its key
-  // and has an index called 'by-date', which is sorted
-  // by the 'time' property
   return idb.open('wittr', 1, function (upgradeDb) {
     let store = upgradeDb.createObjectStore('witters', {
       keyPath: 'id'
@@ -33,6 +25,12 @@ export default function IndexController(container) {
   this._openSocket();
   this._dbPromise = openDatabase();
   this._registerServiceWorker();
+
+  let indexController = this;
+
+  this._showCachedMessages().then(function () {
+    indexController._openSocket();
+  });
 }
 
 IndexController.prototype._registerServiceWorker = function () {
@@ -59,8 +57,6 @@ IndexController.prototype._registerServiceWorker = function () {
       });
     });
 
-  // TODO: listen for the controlling service worker changing
-  // and reload the page
   let refreshing;
   navigator.serviceWorker.addEventListener('controllerchange', function () {
     if (refreshing) return null;
@@ -69,6 +65,26 @@ IndexController.prototype._registerServiceWorker = function () {
     return refreshing = true;
   });
 };
+
+IndexController.prototype._showCachedMessages = function () {
+  let indexController = this;
+
+  return this._dbPromise.then(function (db) {
+    // if we're already showing posts, eg shift-refresh
+    // or the very first load, there's no point fetching
+    // posts from IDB
+    if (!db || indexController._postsView.showingPosts()) return;
+
+    let postsByDateIndex = db.transaction('witters')
+      .objectStore('witters')
+      .index('by-date');
+
+    return postsByDateIndex.getAll();
+  })
+    .then(function (postsIndexedByDate) {
+      return indexController._postsView.addPosts(postsIndexedByDate.reverse());
+    });
+}
 
 IndexController.prototype._trackInstalling = function (worker) {
   let indexController = this;
@@ -89,7 +105,6 @@ IndexController.prototype._updateReady = function (worker) {
     .then(function (answer) {
       if (answer != 'refresh') return null;
 
-      // TODO: tell the service worker to skipWaiting
       return worker.postMessage({ action: 'skipWaiting' });
     });
 };
@@ -146,14 +161,28 @@ IndexController.prototype._onSocketMessage = function (data) {
   this._dbPromise.then(function (db) {
     if (!db) return null;
 
-    // TODO: put each message into the 'wittr
-    // object store
     let tx = db.transaction('witters', 'readwrite');
     let wittersStore = tx.objectStore('witters');
 
-    messages.map((message) => {
+    messages.map(function (message) {
       wittersStore.put(message);
     });
+
+    // keep the newest 30 entries in 'witters'
+    // but delete the rest
+    wittersStore
+      .index('by-date')
+      .openCursor(null, 'prev')
+      .then(function (cursor) {
+        return cursor.advance(30);
+      })
+      .then(function deleteRest(cursor) {
+        if (!cursor) return;
+        cursor.delete();
+        return cursor
+          .continue()
+          .then(deleteRest);
+      });
 
     return tx.complete;
   }).then(function () {

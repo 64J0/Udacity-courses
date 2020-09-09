@@ -85,6 +85,7 @@ dbPromise.then(function (db) {
   console.log("People added");
 });
 
+// get all people with favoriteAnimal === 'cat'
 dbPromise.then(function (db) {
   let tx = db.transaction('people');
   let peopleStore = tx.objectStore('people');
@@ -95,6 +96,7 @@ dbPromise.then(function (db) {
   console.log('People: ', people);
 });
 
+// return all people from database ordered by age
 dbPromise.then(function (db) {
   let tx = db.transaction('people');
   let peopleStore = tx.objectStore('people');
