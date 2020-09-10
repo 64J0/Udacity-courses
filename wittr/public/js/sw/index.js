@@ -1,3 +1,5 @@
+const { request } = require("express");
+
 const urlsToCache = [
   '/skeleton',
   'js/main.js',
@@ -54,6 +56,11 @@ self.addEventListener('fetch', function (event) {
       event.respondWith(servePhoto(event.request));
       return;
     }
+
+    if (requestUrl.pathname.startsWith('/avatars/')) {
+      event.respondWith(serveAvatar(event.request));
+      return;
+    }
   }
 
   event.respondWith(
@@ -63,6 +70,29 @@ self.addEventListener('fetch', function (event) {
       })
   );
 });
+
+function serveAvatar(request) {
+  // Avatar urls look like:
+  // avatars/sam-2x.jpg
+  // But storageUrl has the -2x.jpg bit missing.
+  // Use this url to store & match the image in the cache.
+  // This means you only store one copy of each avatar.
+  let storageUrl = request.url.replace(/-\dx\.jpg$/, '');
+
+  return caches.open(contentImgsCache)
+    .then(function (cache) {
+      return cache.match(storageUrl)
+        .then(function (response) {
+          let networkFetch = fetch(request)
+            .then(function (networkResponse) {
+              cache.put(storageUrl, networkResponse.clone());
+              return networkResponse;
+            });
+
+          return response || networkFetch;
+        });
+    });
+}
 
 function servePhoto(request) {
   // Photo urls look like:

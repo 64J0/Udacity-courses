@@ -175,6 +175,7 @@ IndexController.prototype._cleanImageCache = function () {
           if (message.photo) {
             imagesNeeded.push(message.photo);
           }
+          imagesNeeded.push(message.avatar);
         });
 
         return caches.open('wittr-content-imgs');
