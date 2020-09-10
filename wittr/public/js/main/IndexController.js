@@ -25,8 +25,13 @@ export default function IndexController(container) {
   this._openSocket();
   this._dbPromise = openDatabase();
   this._registerServiceWorker();
+  this._cleanImageCache();
 
   let indexController = this;
+
+  setInterval(function () {
+    indexController._cleanImageCache();
+  }, 1000 * 60 * 5);
 
   this._showCachedMessages().then(function () {
     indexController._openSocket();
@@ -151,6 +156,41 @@ IndexController.prototype._openSocket = function () {
     setTimeout(function () {
       indexController._openSocket();
     }, 5000);
+  });
+};
+
+IndexController.prototype._cleanImageCache = function () {
+  return this._dbPromise.then(function (db) {
+    if (!db) return;
+
+    // Open the 'wittr-content-imgs' cache, and delete any entry
+    // that you no longer need
+    let imagesNeeded = [];
+
+    let tx = db.transaction('witters');
+    return tx.objectStore('witters')
+      .getAll()
+      .then(function (messages) {
+        messages.forEach(function (message) {
+          if (message.photo) {
+            imagesNeeded.push(message.photo);
+          }
+        });
+
+        return caches.open('wittr-content-imgs');
+      })
+      .then(function (cache) {
+        return cache.keys()
+          .then(function (requests) {
+            requests.forEach(function (request) {
+              let url = new URL(request.url);
+
+              if (!imagesNeeded.includes(url.pathname)) {
+                cache.delete(request);
+              }
+            });
+          });
+      });
   });
 };
 

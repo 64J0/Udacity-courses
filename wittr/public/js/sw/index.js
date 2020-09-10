@@ -7,6 +7,12 @@ const urlsToCache = [
 ];
 
 const staticCacheName = 'wittr-static-v6';
+const contentImgsCache = 'wittr-content-imgs';
+
+const allCaches = [
+  staticCacheName,
+  contentImgsCache
+];
 
 self.addEventListener('install', function (event) {
   event.waitUntil(
@@ -25,7 +31,7 @@ self.addEventListener('activate', function (event) {
           cacheNames.filter(function (cacheName) {
             return (
               cacheName.startsWith('wittr-') &&
-              cacheName != staticCacheName
+              !allCaches.includes(cacheName)
             );
           }).map(function (cacheName) {
             return caches.delete(cacheName);
@@ -43,6 +49,11 @@ self.addEventListener('fetch', function (event) {
       event.respondWith(caches.match('/skeleton'));
       return;
     }
+
+    if (requestUrl.pathname.startsWith('/photos/')) {
+      event.respondWith(servePhoto(event.request));
+      return;
+    }
   }
 
   event.respondWith(
@@ -50,11 +61,31 @@ self.addEventListener('fetch', function (event) {
       .then(function (response) {
         return response || fetch(event.request);
       })
-      .catch(function () {
-        return new Response("Uh oh, that totally failed!");
-      })
   );
 });
+
+function servePhoto(request) {
+  // Photo urls look like:
+  // /photos/2h41-2412-41i25jh123-800px.jpg
+  // But storageUrl has the -800px.jpg bit missing.
+  // Use this url to store & match the image in the cache.
+  // This means you only store one copy of each photo.
+  let storageUrl = request.url.replace(/-\d+px\.jpg$/, '');
+
+  return caches.open(contentImgsCache)
+    .then(function (cache) {
+      return cache.match(storageUrl)
+        .then(function (response) {
+          if (response) return response;
+
+          return fetch(request)
+            .then(function (networkResponse) {
+              cache.put(storageUrl, networkResponse.clone());
+              return networkResponse;
+            });
+        });
+    });
+}
 
 self.addEventListener('message', function (event) {
   if (event.data.action == 'skipWaiting') {
